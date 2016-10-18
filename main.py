@@ -7,6 +7,7 @@ import itertools
 import functools
 import operator
 import heapq
+import collections
 from copy import deepcopy
 
 
@@ -64,8 +65,8 @@ def fall_pack(board, pack, x):
         j = HEIGHT - len(pp)
         while b[j][x + i] != EMPTY:
             j -= 1
-        if j < 0:
-            return None
+            if j < 0:
+                return None
         for k, q in enumerate(pp):
             b[j + k][x + i] = q
     return b
@@ -79,6 +80,24 @@ def force_gravity(board):
         for j, c in enumerate(col):
             bb[start + j][i] = c
     return bb
+
+
+def count_anni(line):
+    dq = collections.deque()
+    summ = 0
+    idx = []
+    for i, l in enumerate(line):
+        if l == EMPTY:
+            summ = 0
+            dq.clear()
+            continue
+        dq.append((l, i))
+        summ += l
+        while summ > SUMMATION:
+            summ -= dq.popleft()[0]
+        if summ == SUMMATION:
+            idx.extend(d[1] for d in dq)
+    return len(idx), set(idx)
 
 
 def evaluate_board(board):
