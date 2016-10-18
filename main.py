@@ -6,6 +6,8 @@ import random
 import itertools
 import functools
 import operator
+import heapq
+from copy import deepcopy
 
 
 AI_NAME = "efuteai"
@@ -17,6 +19,8 @@ MAX_TURN = 500
 OBSTACLE = SUMMATION + 1
 EMPTY = 0
 PACKS = []
+
+# @lru_cache(maxsize=32)
 
 
 def rot1(pack):
@@ -41,18 +45,49 @@ def input_initial():
 
 
 def fill_obstacle(pack, num):
-    idx = itertools.islice(
-        ((i, j) for i in range(PACK_SIZE) for j in range(PACK_SIZE) if pack[i][j] == EMPTY),
-        num
-    )
-    p = [row[:] for row in pack]
+    idx = itertools.islice((
+        (i, j) for i in range(PACK_SIZE) for j in range(PACK_SIZE) if pack[i][j] == EMPTY
+    ), num)
+    p = deepcopy(pack)
     for i in idx:
         p[i[0]][i[1]] = OBSTACLE
-    return p
+        num -= 1
+    return p, num
+
+
+def fall_pack(board, pack, x):
+    b = deepcopy(board)
+    p = [[c for c in col if c != EMPTY] for col in zip(*pack)]
+    for i, pp in enumerate(p):
+        if len(pp) < 1:
+            continue
+        j = HEIGHT - len(pp)
+        while b[j][x + i] != EMPTY:
+            j -= 1
+        if j < 0:
+            return None
+        for k, q in enumerate(pp):
+            b[j + k][x + i] = q
+    return b
+
+
+def force_gravity(board):
+    bb = [[EMPTY for _ in range(WIDTH)] for _ in range(HEIGHT)]
+    for i, b in enumerate(zip(*board)):
+        col = [bb for bb in b if bb != EMPTY]
+        start = HEIGHT - len(col)
+        for j, c in enumerate(col):
+            bb[start + j][i] = c
+    return bb
+
+
+def evaluate_board(board):
+    return 0
 
 
 def is_fallable(pack, x):
-    if 0 <= x <= WIDTH - PACK_SIZE: return True
+    if 0 <= x <= WIDTH - PACK_SIZE:
+        return True
     return all(ee == EMPTY for i, e in enumerate(zip(*pack)) if not 0 <= x + i < WIDTH for ee in e)
 
 
@@ -70,13 +105,15 @@ def process_turn():
     _ = input()
 
     rot = random.randrange(0, 4)
-    pack = fill_obstacle(PACKS[turn], max(obstacle_num - enemy_obstacle_num, 0))
+    pack, _ = fill_obstacle(PACKS[turn], max(obstacle_num - enemy_obstacle_num, 0))
     pack = rotate_pack(pack, rot)
 
     left = -PACK_SIZE + 1
     right = WIDTH
-    while not is_fallable(pack, left): left += 1
-    while not is_fallable(pack, right - 1): right -= 1
+    while not is_fallable(pack, left):
+        left += 1
+    while not is_fallable(pack, right - 1):
+        right -= 1
     col = random.randrange(left, right)
     return col, rot
 
