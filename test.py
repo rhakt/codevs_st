@@ -92,6 +92,41 @@ class Test(unittest.TestCase):
         self.assertEqual(main.count_anni([0, 5, 5, 11, 11, 3, 4, 3, 0]), (5, {1, 2, 5, 6, 7}))
         self.assertEqual(main.count_anni([0, 2, 2, 2, 2, 2, 2, 2, 0]), (15, {1, 2, 3, 4, 5, 6, 7}))
 
+    def test_anni_board(self):
+        b = [[main.EMPTY for _ in range(main.WIDTH)] for _ in range(main.HEIGHT)]
+        c = deepcopy(b)
+        d = deepcopy(b)
+        b[main.HEIGHT - 1][5] = 5
+        b[main.HEIGHT - 1][6] = 5
+        b[main.HEIGHT - 2][5] = 5
+        b[main.HEIGHT - 2][6] = 2
+        b[main.HEIGHT - 1][7] = 3
+        b[main.HEIGHT - 1][8] = 5
+        c[main.HEIGHT - 1][6] = 2
+        c[main.HEIGHT - 1][7] = 3
+        c[main.HEIGHT - 1][8] = 5
+        anni, b = main.anni_board(b)
+        self.assertEqual(anni, 6)
+        self.assertEqual(b, c)
+        anni, b = main.anni_board(b)
+        self.assertEqual(anni, 3)
+        self.assertEqual(b, d)
+        anni, b = main.anni_board(b)
+        self.assertEqual(anni, 0)
+        self.assertEqual(b, d)
+
+    def test_evaluate_board(self):
+        b = [[main.EMPTY for _ in range(main.WIDTH)] for _ in range(main.HEIGHT)]
+        b[main.HEIGHT - 1][5] = 5
+        b[main.HEIGHT - 1][6] = 5
+        b[main.HEIGHT - 2][5] = 5
+        b[main.HEIGHT - 2][6] = 2
+        b[main.HEIGHT - 1][7] = 3
+        b[main.HEIGHT - 1][8] = 5
+        score, chain = main.evaluate_board(b)
+        self.assertEqual(chain, 2)
+        self.assertEqual(score, 4)
+
 
 if __name__ == '__main__':
     unittest.main()
