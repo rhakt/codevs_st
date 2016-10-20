@@ -61,50 +61,45 @@ class Test(unittest.TestCase):
         self.assertEqual(main.is_fallable(pack4,  9), False)
 
     def test_fall_pack(self):
-        board = [[main.EMPTY for _ in range(main.WIDTH)] for _ in range(main.HEIGHT)]
-        board[main.HEIGHT-1][2] = main.OBSTACLE
+        board = [[main.EMPTY] * main.HEIGHT for _ in range(main.WIDTH)]
+        board[2][main.HEIGHT-1] = main.OBSTACLE
         pack = [[1, 0, 3], [4, 0, 0], [0, 8, 9]]
         bb = deepcopy(board)
-        bb[main.HEIGHT - 1][1] = pack[1][0]
-        bb[main.HEIGHT - 2][1] = pack[0][0]
-        bb[main.HEIGHT - 2][2] = pack[2][1]
-        bb[main.HEIGHT - 1][3] = pack[2][2]
-        bb[main.HEIGHT - 2][3] = pack[0][2]
+        bb[1][main.HEIGHT - 1] = pack[1][0]
+        bb[1][main.HEIGHT - 2] = pack[0][0]
+        bb[2][main.HEIGHT - 2] = pack[2][1]
+        bb[3][main.HEIGHT - 1] = pack[2][2]
+        bb[3][main.HEIGHT - 2] = pack[0][2]
         self.assertEqual(main.fall_pack(board, pack, 1), bb)
         for j in range(main.HEIGHT):
-            board[j][2] = main.OBSTACLE
+            board[2][j] = main.OBSTACLE
         self.assertEqual(main.fall_pack(board, pack, 1), None)
 
     def test_gravity(self):
-        b = [[main.EMPTY for _ in range(main.WIDTH)] for _ in range(main.HEIGHT)]
+        b = [[main.EMPTY] * main.HEIGHT for _ in range(main.WIDTH)]
         c = deepcopy(b)
-        b[main.HEIGHT - 4][2] = main.OBSTACLE
-        c[main.HEIGHT - 1][2] = main.OBSTACLE
-        b[main.HEIGHT - 9][5] = 3
-        c[main.HEIGHT - 1][5] = 3
-        b[main.HEIGHT - 10][5] = 2
-        c[main.HEIGHT - 2][5] = 2
-        self.assertEqual(main.force_gravity(b), c)
-
-    def test_count_anni(self):
-        self.assertEqual(main.count_anni([5, 5, 5]), (4, {0, 1, 2}))
-        self.assertEqual(main.count_anni([0, 5, 5, 0, 5, 3, 3, 4, 0]), (5, {1, 2, 5, 6, 7}))
-        self.assertEqual(main.count_anni([0, 5, 5, 11, 11, 3, 4, 3, 0]), (5, {1, 2, 5, 6, 7}))
-        self.assertEqual(main.count_anni([0, 2, 2, 2, 2, 2, 2, 2, 0]), (15, {1, 2, 3, 4, 5, 6, 7}))
+        b[2][main.HEIGHT - 4] = main.OBSTACLE
+        c[2][main.HEIGHT - 1] = main.OBSTACLE
+        b[5][main.HEIGHT - 9] = 3
+        c[5][main.HEIGHT - 1] = 3
+        b[5][main.HEIGHT - 10] = 2
+        c[5][main.HEIGHT - 2] = 2
+        main.force_gravity(b)
+        self.assertEqual(b, c)
 
     def test_anni_board(self):
-        b = [[main.EMPTY for _ in range(main.WIDTH)] for _ in range(main.HEIGHT)]
+        b = [[main.EMPTY] * main.HEIGHT for _ in range(main.WIDTH)]
         c = deepcopy(b)
         d = deepcopy(b)
-        b[main.HEIGHT - 1][5] = 5
-        b[main.HEIGHT - 1][6] = 5
-        b[main.HEIGHT - 2][5] = 5
-        b[main.HEIGHT - 2][6] = 2
-        b[main.HEIGHT - 1][7] = 3
-        b[main.HEIGHT - 1][8] = 5
-        c[main.HEIGHT - 1][6] = 2
-        c[main.HEIGHT - 1][7] = 3
-        c[main.HEIGHT - 1][8] = 5
+        b[5][main.HEIGHT - 1] = 5
+        b[6][main.HEIGHT - 1] = 5
+        b[5][main.HEIGHT - 2] = 5
+        b[6][main.HEIGHT - 2] = 2
+        b[7][main.HEIGHT - 1] = 3
+        b[8][main.HEIGHT - 1] = 5
+        c[6][main.HEIGHT - 1] = 2
+        c[7][main.HEIGHT - 1] = 3
+        c[8][main.HEIGHT - 1] = 5
         anni, b = main.anni_board(b)
         self.assertEqual(anni, 6)
         self.assertEqual(b, c)
@@ -116,13 +111,13 @@ class Test(unittest.TestCase):
         self.assertEqual(b, d)
 
     def test_evaluate_board(self):
-        b = [[main.EMPTY for _ in range(main.WIDTH)] for _ in range(main.HEIGHT)]
-        b[main.HEIGHT - 1][5] = 5
-        b[main.HEIGHT - 1][6] = 5
-        b[main.HEIGHT - 2][5] = 5
-        b[main.HEIGHT - 2][6] = 2
-        b[main.HEIGHT - 1][7] = 3
-        b[main.HEIGHT - 1][8] = 5
+        b = [[main.EMPTY] * main.HEIGHT for _ in range(main.WIDTH)]
+        b[5][main.HEIGHT - 1] = 5
+        b[6][main.HEIGHT - 1] = 5
+        b[5][main.HEIGHT - 2] = 5
+        b[6][main.HEIGHT - 2] = 2
+        b[7][main.HEIGHT - 1] = 3
+        b[8][main.HEIGHT - 1] = 5
         score, chain = main.evaluate_board(b)
         self.assertEqual(chain, 2)
         self.assertEqual(score, 4)

@@ -180,6 +180,7 @@ def evaluate_board(board, update):
         k = board_hash(board)
         res = BOARD_CACHE.get(k, None)
         if res is not None:
+            # anni2, board2, update2 = anni_board(board, update)
             anni, board, update = res
             RATE[0] += 1
             # TODO: 本当に一致する？
