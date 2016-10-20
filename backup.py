@@ -16,7 +16,7 @@ import struct
 from heapq import heappush, heappop
 
 
-AI_NAME = "efuteaI"
+AI_NAME = "efuteaI2"
 WIDTH = 10
 HEIGHT = 16
 PACK_SIZE = 3
@@ -156,8 +156,8 @@ def anni_board(board, update):
         lst.extend([
             (x, 0, 0, 1),
             (0, y, 1, 0),
-            (0 if x < y else y - x, 0 if y < x else x - y, 1, 1),
-            (x - yy if yy < x else 0, yy + x if x < yy else HEIGHT - 1, 1, -1)
+            (x - y if y < x else 0, 0 if y < x else y - x, 1, 1),
+            (x - yy if yy < x else 0, HEIGHT - 1 if yy < x else y + x, 1, -1)
         ])
     for x, y, dx, dy in set(lst):
         anni += __anni_board(board, b, x, y, dx, dy)
@@ -177,18 +177,17 @@ def evaluate_board(board, update):
     chain = 0
     anni_total = 1
     while True:
-        k = board_hash(board)
-        res = BOARD_CACHE.get(k, None)
-        if res is not None:
-            # anni2, board2, update2 = anni_board(board, update)
-            anni, board, update = res
-            RATE[0] += 1
-            # TODO: 本当に一致する？
-            # 他にキャッシュできるところは？
-        else:
-            anni, board, update = anni_board(board, update)
-            BOARD_CACHE[k] = (anni, board, update)
-            RATE[1] += 1
+        #k = board_hash(board)
+        #res = BOARD_CACHE.get(k, None)
+        #if res is not None:
+        #    anni, board, update = res
+        #    RATE[0] += 1
+        #    # TODO: 本当に一致する？
+        #    # 他にキャッシュできるところは？
+        #else:
+        anni, board, update = anni_board(board, update)
+        #BOARD_CACHE[k] = (anni, board, update)
+        #RATE[1] += 1
         if anni == 0:
             break
         anni_total *= anni
@@ -204,8 +203,8 @@ def evaluate(board, update):
     temp = [len(col) - col.count(EMPTY) for col in board]
     h = max(temp) - math.floor(sum(temp) / len(temp))
     s = score * 5 if score >= 5 else 1
-    #if chain > 3:
-    #    print("chain: {}".format(chain), file=sys.stderr)
+    if chain > 3:
+        print("chain: {}".format(chain), file=sys.stderr)
     return h - s, b
 
 
@@ -213,13 +212,14 @@ def next_boards(board, turn, obstacle_num=0):
     pack = fill_obstacle(PACKS[turn], obstacle_num)[0]
     packs = [rotate_pack(pack, r) for r in range(4)]
     temp = ((packs[r], (p, r)) for p in range(-2, WIDTH) for r in range(4))
+    #temp = ((packs[1], (5, 1)) for _ in range(1))
     return ((fall_pack(board, t[0], t[1][0]), t[1]) for t in temp if is_fallable(t[0], t[1][0]))
 
 
 def solve(board, turn, obstacle_num, remain_time):
     # limit = time.time() + remain_time
     hpq = []
-    beam = 48
+    beam = 100
     r = 1
 
     for c in next_boards(board, turn, obstacle_num):
@@ -264,7 +264,7 @@ def process_turn():
     ob = max(obstacle_num - enemy_obstacle_num, 0)
     res = solve(board, turn, ob, min(remain_time, 20000))
     #print(res[0], file=sys.stderr)
-    print(str(math.floor(RATE[0] * 100 / (RATE[0] + RATE[1]))) + "%", file=sys.stderr)
+    #print(str(math.floor(RATE[0] * 100 / (RATE[0] + RATE[1]))) + "%", file=sys.stderr)
     return res[2]
 
 

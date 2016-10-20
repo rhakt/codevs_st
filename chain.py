@@ -5,18 +5,10 @@ import sys
 import traceback
 import random
 import itertools
-import functools
-import operator
 import math
-import time
-import collections
-import hashlib
-import codecs
-import struct
-from heapq import heappush, heappop
 
 
-AI_NAME = "efutea"
+AI_NAME = "game info >"
 WIDTH = 10
 HEIGHT = 19
 PACK_SIZE = 3
@@ -160,77 +152,36 @@ def anni_board(board, update):
 def evaluate_board(board, update):
     score = 0
     chain = 0
-    anni_total = 1
+    anni_total = []
     while True:
         anni, update = anni_board(board, update)
         if anni == 0:
             break
-        anni_total *= anni
+        anni_total.append(anni)
         chain += 1
         score += math.floor(1.3**chain) * math.floor(anni / 2.0)
     return score, chain, anni_total
 
 
-def evaluate(board, update):
-    if board is None:
-        return INF
-    score, chain, anni = evaluate_board(board, update)
-    temp = [len(col) - col.count(EMPTY) for col in board]
-    h = max(temp) - math.floor(sum(temp) / len(temp))
-    s = score * 5 if score >= 5 else 1
-    if chain > 5:
-        print("chain: {}".format(chain), file=sys.stderr)
-    if any(board[i][PACK_SIZE - 1] != EMPTY for i in range(WIDTH)):
-        # print("inf", file=sys.stderr)
-        return INF
-    return h - s
-
-
-def next_boards(board, turn, obstacle_num=0):
+def solve(board, turn, obstacle_num, x, r):
     if obstacle_num > 0:
-        packs = (rotate_pack(fill_obstacle(PACKS[turn], obstacle_num), r) for r in range(4))
+        pack = rotate_pack(fill_obstacle(PACKS[turn], obstacle_num), r)
     else:
-        packs = (PACKS_CACHE[turn * 4 + r] for r in range(4))
-    temp = ((p, (x, r)) for r, p in enumerate(packs) for x in range(-2, WIDTH))
-    return ((fall_pack(board, t[0], t[1][0]), t[1]) for t in temp if is_fallable(t[0], t[1][0]))
-
-
-def solve(board, turn, obstacle_num, remain_time):
-    # limit = time.time() + remain_time
-    hpq = []
-    beam = 48
-    r = 1
-
-    for c in next_boards(board, turn, obstacle_num):
-        score = evaluate(c[0][0], c[0][1])
-        if score != INF:
-            heappush(hpq, (score, c[0][0], c[1]))
-
-    for t in range(turn + 1, min(MAX_TURN, turn + r + 1)):
-        next_hpq = []
-        for _ in range(min(beam, len(hpq))):
-            st = heappop(hpq)
-            if st[1] is None:
-                continue
-            for c in next_boards(st[1], t, 0):
-                score = evaluate(c[0][0], c[0][1])
-                if score != INF:
-                    heappush(next_hpq, (st[0] + score, c[0][0], st[2]))
-        if len(next_hpq) < 1:
-            break
-        # print("max: {}".format(next_hpq[0][0]), file=sys.stderr)
-        hpq = next_hpq
-
-    if len(hpq) < 1:
-        return INF, None, (0, 0)
-
-    return hpq[0]
+        pack = PACKS_CACHE[turn * 4 + r]
+    if not is_fallable(pack, x):
+        return "invalid (pos, rot)"
+    b, u = fall_pack(board, pack, x)
+    score, chain, anni = evaluate_board(b, u)
+    return "score: {}, chain: {}, anni: {}".format(score, chain, anni)
 
 
 def process_turn():
-    turn = int(input())
-    #print("turn: {}".format(turn), file=sys.stderr)
-    remain_time = int(input())
+    s = ""
+    while len(s.strip()) is 0:
+        s = input()
+    turn = int(s)
+    print("turn: {}".format(turn), file=sys.stderr)
+    _ = int(input())
 
     obstacle_num = int(input())
     board = [list(bb) for bb in zip(*[[int(i) for i in input().split()] for _ in range(HEIGHT - PACK_SIZE)])]
@@ -240,13 +191,20 @@ def process_turn():
 
     enemy_obstacle_num = int(input())
     _ = [list(bb) for bb in zip(*[[int(i) for i in input().split()] for _ in range(HEIGHT - PACK_SIZE)])]
-    #for b in board:
-    #    b.extend([0] * PACK_SIZE)
     _ = input()
 
     ob = max(obstacle_num - enemy_obstacle_num, 0)
-    res = solve(board, turn, ob, min(remain_time, 20000))
-    return res[2]
+
+    if turn is 0:
+        return ""
+
+    print("(pos, rot) > ", file=sys.stderr)
+
+    s = ""
+    while len(s.strip()) is 0:
+        s = input()
+    pos, rot = [int(x) for x in s.split()]
+    return solve(board, turn, ob, pos, rot)
 
 
 def main():
@@ -256,7 +214,8 @@ def main():
     input_initial()
     try:
         while True:
-            print(*process_turn())
+            print(process_turn())
+            print("turn info >")
             sys.stdout.flush()
     except KeyboardInterrupt as _:
         pass
