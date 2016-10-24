@@ -160,7 +160,7 @@ def anni_board(board, update):
     lst = []
     for x, y in update:
         sx = x - 1
-        while sx > 0:
+        while sx >= 0:
             if b[sx][y] == EMPTY:
                 break
             sx -= 1
@@ -252,18 +252,17 @@ def evaluate(board, update, ob, turn):
     if chain > 11:
         print("emitable: {} ({})".format(chain, sf), file=sys.stderr)
     s = sf * 5 * 2
-    if ob > 7:
-        s -= ob * 5
 
     hei = [len(b) - b.count(0) for b in board]
     hpena = 0
     for i in range(WIDTH - 1):
         dh = abs(hei[i] - hei[i + 1])
         if dh > 3:
-            hpena += (dh - 3) * 5
+            hpena += (dh - 3) * (dh - 3)
 
     next_sc = s
     next_ch = 0
+    next_ch_total = 0
     pack_lst = check_next_pack(turn)
     for x in range(WIDTH):
         hs = hei[x + 1] if x + 1 < WIDTH else 0
@@ -283,18 +282,18 @@ def evaluate(board, update, ob, turn):
             sf = math.floor(sc / 5)
             s = ch * 30
             s += sf * 5
-            #if turn + 2 - ch * 1.5 < 0:
-            #    s = sf * 5
-            #else:
-            #    s = ch * 15
+            #next_ch_total += max(ch - 10, 0) * sf
+            next_ch_total += sf if ch > 10 else 0
             next_ch = max(ch, next_ch)
             next_sc = max(s, next_sc)
 
     if next_ch > 11:
-        print("next chain: {} ({})".format(next_ch, next_sc), file=sys.stderr)
+        print("next chain: {} ({}, {})".format(next_ch, next_sc, next_ch_total), file=sys.stderr)
 
-    if ob > 7:
-        next_sc -= ob * 5
+    next_sc += next_ch_total
+
+    #if ob > 7:
+    #    next_sc -= ob * 5
     next_sc -= hpena
 
     return -next_sc, chain, score, ob
@@ -331,8 +330,8 @@ def next_boards(board, turn, obstacle_num=0):
 def solve(board, turn, obstacle_num, remain_time):
     # limit = time.time() + remain_time
     hpq = []
-    beam = 48
-    r = 3
+    beam = 32
+    r = 2
 
     for c in next_boards(board, turn, obstacle_num):
         score, chain, sc, ob = evaluate(c[0][0], c[0][1], c[2], turn)
