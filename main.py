@@ -13,7 +13,7 @@ from collections import deque
 from heapq import heappush, heappop
 
 
-AI_NAME = "efutea"
+AI_NAME = "efutea_local"
 WIDTH = 10
 HEIGHT = 19
 PACK_SIZE = 3
@@ -25,6 +25,8 @@ INF = float('inf')
 PACKS = []
 PACKS_CACHE = []
 NEXT_CACHE = None
+CHECK_AROUND_DIR = [(-1, 0), (-1, -1), (-1, 1)]
+PACK_INCLUDE = None
 
 
 def input_packs():
@@ -44,13 +46,23 @@ def rotate_packs(pack):
         yield pack
 
 
+def pack_includes(pack):
+    lst = [False] * (SUMMATION - 1)
+    for p in pack:
+        for pp in p:
+            if EMPTY < pp < OBSTACLE:
+                lst[pp - 1] = True
+    return lst
+
+
 def input_initial():
-    global WIDTH, HEIGHT, PACK_SIZE, SUMMATION, MAX_TURN, OBSTACLE, PACKS, PACKS_CACHE
+    global WIDTH, HEIGHT, PACK_SIZE, SUMMATION, MAX_TURN, OBSTACLE, PACKS, PACKS_CACHE, PACK_INCLUDE
     WIDTH, HEIGHT, PACK_SIZE, SUMMATION, MAX_TURN = [int(x) for x in input().split()]
     HEIGHT += PACK_SIZE
     OBSTACLE = SUMMATION + 1
     PACKS = [input_packs() for _ in range(MAX_TURN)]
     PACKS_CACHE = [p for pack in PACKS for p in rotate_packs(pack)]
+    PACK_INCLUDE = [pack_includes(pack) for pack in PACKS]
 
 
 def anni_board_line(board, x, y, dx, dy, idx):
@@ -122,9 +134,7 @@ def __anni_board(sb, tb, x, y, dx, dy, lst):
     while 0 <= x < WIDTH and 0 <= y < HEIGHT:
         e = sb[x][y]
         if e == EMPTY:
-            summ = 0
-            start = i + 1
-            last = start
+            break
         else:
             last += 1
             summ += e
@@ -149,13 +159,32 @@ def anni_board(board, update):
     b = [row[:] for row in board]
     lst = []
     for x, y in update:
-        yy = HEIGHT - 1 - y
-        lst.extend([
-            (x, 0, 0, 1),
-            (0, y, 1, 0),
-            (x - y if y < x else 0, 0 if y < x else y - x, 1, 1),
-            (x - yy if yy < x else 0, HEIGHT - 1 if yy < x else y + x, 1, -1)
-        ])
+        sx = x - 1
+        while sx > 0:
+            if b[sx][y] == EMPTY:
+                break
+            sx -= 1
+        lst.append((sx + 1, y, 1, 0))
+        lst.append((x, y, 0, 1))
+
+        sx = x - 1
+        sy = y - 1
+        while sx >= 0 and sy >= 0:
+            if b[sx][sy] == EMPTY:
+                break
+            sx -= 1
+            sy -= 1
+        lst.append((sx + 1, sy + 1, 1, 1))
+
+        sx = x - 1
+        sy = y + 1
+        while sx >= 0 and sy < HEIGHT:
+            if b[sx][sy] == EMPTY:
+                break
+            sx -= 1
+            sy += 1
+        lst.append((sx + 1, sy - 1, 1, -1))
+
     anni_lst = []
     for x, y, dx, dy in set(lst):
         anni += __anni_board(b, board, x, y, dx, dy, anni_lst)
@@ -174,7 +203,42 @@ def evaluate_board(board, update):
     return score, chain
 
 
-def evaluate(board, update, ob):
+def check_next_pack(turn, num=2):
+    lst = [False] * (SUMMATION - 1)
+    for t in range(turn + 1, turn + num + 1):
+        for i in range(SUMMATION - 1):
+            lst[i] |= PACK_INCLUDE[t][i]
+    return lst
+
+
+def check_around(board, x, y):
+    lst = [False] * (SUMMATION - 1)
+
+    for car in CHECK_AROUND_DIR:
+        bb = OBSTACLE
+        bb2 = OBSTACLE
+
+        xx = x + car[0]
+        yy = y + car[1]
+        if 0 <= xx < WIDTH and 0 <= yy < HEIGHT:
+            bb = board[xx][yy]
+            if EMPTY < bb < OBSTACLE:
+                lst[SUMMATION - bb - 1] = True
+
+        xx = x - car[0]
+        yy = y - car[1]
+        if 0 <= xx < WIDTH and 0 <= yy < HEIGHT:
+            bb2 = board[xx][yy]
+            if EMPTY < bb2 < OBSTACLE:
+                lst[SUMMATION - bb2 - 1] = True
+
+        if 0 < bb + bb2 < SUMMATION:
+            lst[SUMMATION - bb - bb2 - 1] = True
+
+    return lst
+
+
+def evaluate(board, update, ob, turn):
     if board is None:
         return INF, 0, 0, ob
 
@@ -184,35 +248,61 @@ def evaluate(board, update, ob):
     if any(board[i][PACK_SIZE - 1] != EMPTY for i in range(WIDTH)):
         return INF, 0, 0, ob
 
-    if chain > 12:
-        return -chain, chain, score, ob
+    sf = math.floor(score / 5)
+    if chain > 11:
+        print("emitable: {} ({})".format(chain, sf), file=sys.stderr)
+    s = sf * 5 * 2
+    if ob > 7:
+        s -= ob * 5
 
     hei = [len(b) - b.count(0) for b in board]
+    hpena = 0
+    for i in range(WIDTH - 1):
+        dh = abs(hei[i] - hei[i + 1])
+        if dh > 3:
+            hpena += (dh - 3) * 5
+
+    next_sc = s
     next_ch = 0
-    next_sc = 0
+    pack_lst = check_next_pack(turn)
     for x in range(WIDTH):
         hs = hei[x + 1] if x + 1 < WIDTH else 0
         hs += hei[x - 1] if x - 1 > 0 else 0
         if hs == 0:
             continue
+        y = HEIGHT - 1 - hei[x]
+        ar = check_around(board, x, y)
         for i in range(1, SUMMATION):
+            if not pack_lst[i - 1]:
+                continue
+            if not ar[i - 1]:
+                continue
             b = [bb[:] for bb in board]
-            y = HEIGHT - 1 - hei[x]
             b[x][y] = i
             sc, ch = evaluate_board(b, [(x, y)])
+            sf = math.floor(sc / 5)
+            s = ch * 30
+            s += sf * 5
+            #if turn + 2 - ch * 1.5 < 0:
+            #    s = sf * 5
+            #else:
+            #    s = ch * 15
             next_ch = max(ch, next_ch)
-            next_sc = max(sc, next_sc)
+            next_sc = max(s, next_sc)
 
-    if next_ch > 12:
-        print("next chain: {}".format(next_ch), file=sys.stderr)
-    s = next_ch - ob
+    if next_ch > 11:
+        print("next chain: {} ({})".format(next_ch, next_sc), file=sys.stderr)
 
-    return -s, chain, score, ob
+    if ob > 7:
+        next_sc -= ob * 5
+    next_sc -= hpena
+
+    return -next_sc, chain, score, ob
 
 
 def cand_range(board):
     start = -2
-    end = WIDTH - 1
+    end = WIDTH
     stan = WIDTH / 2
     while start < stan:
         b = board[start + PACK_SIZE]
@@ -241,13 +331,13 @@ def next_boards(board, turn, obstacle_num=0):
 def solve(board, turn, obstacle_num, remain_time):
     # limit = time.time() + remain_time
     hpq = []
-    beam = 32
-    r = 2
+    beam = 48
+    r = 3
 
     for c in next_boards(board, turn, obstacle_num):
-        score, chain, sc, ob = evaluate(c[0][0], c[0][1], c[2])
+        score, chain, sc, ob = evaluate(c[0][0], c[0][1], c[2], turn)
         if score != INF:
-            heappush(hpq, (score, c[0][0], [(c[1][0], c[1][1], obstacle_num, chain)], ob))
+            heappush(hpq, (score, c[0][0], [(c[1][0], c[1][1], obstacle_num, chain)], ob, sc))
 
     for t in range(turn + 1, min(MAX_TURN, turn + r + 1)):
         next_hpq = []
@@ -257,14 +347,14 @@ def solve(board, turn, obstacle_num, remain_time):
             if st[1] is None:
                 continue
             for c in next_boards(st[1], t, st[3]):
-                score, chain, sc, ob = evaluate(c[0][0], c[0][1], c[2])
+                score, chain, sc, ob = evaluate(c[0][0], c[0][1], c[2], turn)
                 ob = max(0, c[2] - math.floor(sc / 5))
                 max_chain = max(max_chain, chain)
                 if score != INF:
                     pr = [t for t in st[2]]
                     pr.append((c[1][0], c[1][1], st[3], chain))
-                    #heappush(next_hpq, (st[0] + score, c[0][0], pr, ob))
-                    heappush(next_hpq, (score, c[0][0], pr, ob))
+                    heappush(next_hpq, (score - st[4], c[0][0], pr, ob, sc + st[4]))
+                    #heappush(next_hpq, (score, c[0][0], pr, ob))
                 #if chain > 12:
                 #    print("chain: {}".format(chain), file=sys.stderr)
         if len(next_hpq) < 1:
@@ -301,14 +391,16 @@ def process_turn():
         if len(NEXT_CACHE) != 0:
             pr = NEXT_CACHE.popleft()
             if ob == pr[2]:
-                if pr[3] > 6:
-                    print("emit {}chain?".format(pr[3]), file=sys.stderr)
+                if pr[3] > 1:
+                    print("emit {} chain".format(pr[3]), file=sys.stderr)
                 return pr[:2]
             NEXT_CACHE = None
             print("cache reset!", file=sys.stderr)
     res = solve(board, turn, ob, min(remain_time, 20000))
     NEXT_CACHE = deque(res[2])
     pr = NEXT_CACHE.popleft()
+    if pr[3] > 1:
+        print("emit {} chain ({})".format(pr[3], res[0]), file=sys.stderr)
     return pr[:2]
 
 
