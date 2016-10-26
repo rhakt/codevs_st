@@ -9,13 +9,11 @@
 #include <queue>
 #include <random>
 
-#define POS_HASH(x, y) (x * 100 + y)
-#define LINE_HASH(x, y, dx, dy) (x * 10000, y * 100 + dx * 10 + dy)
-
 
 using namespace std;
 
 static const string AI_NAME = "efutea";
+static const int INF = 1 << 30;
 
 
 inline int rnd(const int range) {
@@ -26,7 +24,8 @@ inline int rnd(const int range) {
 }
 
 
-inline void uniq(vector<int>& vec) {
+template <class T>
+inline void uniq(vector<T>& vec) {
 	sort(vec.begin(), vec.end());
 	vec.erase(unique(vec.begin(), vec.end()), vec.end());
 }
@@ -34,6 +33,8 @@ inline void uniq(vector<int>& vec) {
 
 typedef vector<int> Pack;
 typedef vector<int> Board;
+typedef pair<int, int> Pii;
+typedef tuple<int, int, int> Score;
 
 
 class Game {
@@ -83,36 +84,29 @@ private:
         return true;
     }
 
-	inline tuple<int, vector<int>> anni_board(Board& board, vector<int>& update) {
-		int anni = 0;
-		vector<int> lst;
-		Board b = board;
-
-
-		return make_tuple(anni, lst);
-	}
-
-	inline vector<int> forceGravity(Board& board, vector<int>& update) {
-		vector<int> lst;
+	inline vector<Pii> forceGravity(Board& board, vector<int>& update) {
+		vector<Pii> lst;
 		uniq(update);
 		for (auto& x : update) {
-			int j = H - 2;
+			int j = BH - 2;
 			int e = -1;
 			while (j > 0) {
 				if (e == -1 && board[x + j * BW] == EMPTY) {
 					e = j;
-				} else if (e != -1 && board[x + j * BW] != EMPTY) {
+				}
+				else if (e != -1 && board[x + j * BW] != EMPTY) {
 					swap(board[x + j * BW], board[x + e * BW]);
-					lst.push_back(POS_HASH(x, e));
+					lst.emplace_back(x, e);
 					j = e;
 					e = -1;
 				}
+				--j;
 			}
 		}
 		return move(lst);
 	}
 
-	inline vector<int> forceGravity(Board& board, const Pack& pack, const int pos) {
+	inline vector<Pii> forceGravity(Board& board, const Pack& pack, const int pos) {
 		vector<int> update;
 		for (int i = 0; i < pack.size(); ++i) {
 			if (pack[i] == EMPTY) continue;
@@ -123,15 +117,102 @@ private:
 		return forceGravity(board, update);
 	}
 
+	inline int anniLine(const Board& b, Board& board, int sx, int sy, int dx, int dy, vector<int>& update) {
+		int anni = 0;
+		int start = 0, last = 0, sum = 0;
+		int idx = sx + sy * BW;
+		while (EMPTY < b[idx] && b[idx] < OBSTACLE) {
+			++last;
+			sum += b[idx];
+			while (sum > SUM) {
+				sum -= b[sx + start * dx + (sy + start * dy) * BW];
+				++start;
+			}
+			if (sum == SUM) {
+				anni += (last - start);
+				for (int k = start; k < last; ++k) {
+					board[sx + k * dx + (sy + k * dy) * BW] = EMPTY;
+					update.push_back(sx + k * dx);
+				}
+			}
+			idx += dx + dy * BW;
+		}
+		return anni;
+	}
+
+	inline tuple<int, vector<Pii>> anniBoard(Board& board, vector<Pii>& update) {
+		int anni = 0;
+		vector<tuple<int, int, int, int>> lst;
+		vector<Pii> dir = { {1, 0}, {0, 1}, {1, 1}, {1, -1} };
+		const Board b = board;
+		for (auto&& u : update) {
+			const int bx = u.first, by = u.second;
+			int sx, sy;
+
+			sx = bx - 1;
+			sy = by;
+			while (EMPTY < b[sx + by * BW] && b[sx + by * BW] < OBSTACLE) --sx;
+			lst.emplace_back(sx + 1, sy, 1, 0);
+
+			sx = bx;
+			sy = by - 1;
+			while (EMPTY < b[sx + sy * BW] && b[sx + sy * BW] < OBSTACLE) --sy;
+			lst.emplace_back(sx, sy + 1, 0, 1);
+
+			sx = bx - 1;
+			sy = by - 1;
+			while (EMPTY < b[sx + sy * BW] && b[sx + sy * BW] < OBSTACLE) { --sx; --sy; }
+			lst.emplace_back(sx + 1, sy + 1, 1, 1);
+
+			sx = bx - 1;
+			sy = by + 1;
+			while (EMPTY < b[sx + sy * BW] && b[sx + sy * BW] < OBSTACLE) { --sx; ++sy; }
+			lst.emplace_back(sx + 1, sy - 1, 1, -1);
+		}
+		vector<int> anniList;
+		uniq(lst);
+		for (auto&& l : lst) {
+			anni += anniLine(b, board, get<0>(l), get<1>(l), get<2>(l), get<3>(l), anniList);
+		}
+		return make_tuple(anni, forceGravity(board, anniList));
+	}
+
+	inline Score evaluateBoard(int turn, Board board, const Pack& pack, const int pos, int ob) {
+		static Board preb;
+		static int psc = 0;
+		if (turn > 0) {
+			for (int i = 0; i < board.size(); ++i) {
+				if (preb[i] != board[i]) cerr << "!!" << endl;
+			}
+		}
+		
+		auto update = forceGravity(board, pack, pos);
+		int score = 0, chain = 0;
+		while (true) {
+			auto res = anniBoard(board, update);
+			auto anni = get<0>(res);
+			update = move(get<1>(res));
+			if (anni == 0) break;
+			++chain;
+			score += powCache[chain - 1] * static_cast<int>(floor(anni * 0.5f));
+		}
+		psc += score;
+		if(chain > 0)
+			cerr << "[" << turn <<  "] chain: " << chain << " score: " << psc << endl;
+		preb = board;
+
+		return {score, score, chain};
+	}
 
 public:
     const int W, H, PS, SUM, TURN, EMPTY, OBSTACLE;
     const int BW, BH;
     vector<Pack> packs;
+	vector<int> powCache;
 
     Game(const int w, const int h, const int ps, const int sum, const int turn, const vector<Pack>& packs_)
             : W(w), H(h), PS(ps), SUM(sum), TURN(turn), EMPTY(0), OBSTACLE(sum + 1), packs(turn * 4),
-              BW(W + 2), BH(H + PS + 2) {
+              BW(W + 2), BH(H + PS + 2), powCache(50) {
         for(int i = 0; i < packs_.size(); ++i) {
             packs[i * 4] = packs_[i];
             for(int k = 1; k < 4; ++k) {
@@ -139,6 +220,11 @@ public:
                 packs[j] = rot1(packs[j - 1]);
             }
         }
+		auto k = 1.3f;
+		for (auto&& pc : powCache) {
+			pc = static_cast<int>(floor(k));
+			k *= 1.3f;
+		}
     }
 
     Board inputBoard() {
@@ -164,17 +250,19 @@ public:
     }
 
     tuple<int, int> solve(const int turn, const int remain, const int ob, const Board& b, const int eob, const Board& eb) {
-        auto r1 = rnd(W + 1) - 2;
+		auto r1 = rnd(W + 1) - 2;
         auto r2 = rnd(4);
 
         Pack p = packs[turn * 4];
         int rob = max(ob - eob, 0);
-        fillObstacle(p, rob);
+        int nob = fillObstacle(p, rob);
 
         while(!isFallable(rotatePack(p, r2), r1)) {
             r1 = rnd(W + 1) - 2;
             r2 = rnd(4);
         }
+
+		evaluateBoard(turn, b, rotatePack(p, r2), r1, rob - nob);
 
         return make_tuple(r1, r2);
     }
