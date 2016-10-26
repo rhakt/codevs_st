@@ -35,6 +35,8 @@ inline void uniq(vector<T>& vec) {
 typedef vector<int> Pack;
 typedef vector<int> Board;
 typedef pair<int, int> Pii;
+typedef tuple<int, int, int, int, int> Action;
+
 
 struct Result {
 	int score;
@@ -47,14 +49,14 @@ struct Score {
 	int score;
 	int ob;
 	Board board;
-	vector<tuple<int, int, int, int>> hist;
+	vector<Action> hist;
 	explicit Score(const Board& b, int ob_ = 0) : score(0), board(b), ob(ob_) {}
 	Score(Score& s, Result&& r, const int pos, const int rot, int ob_) {
 		score = r.score + s.score;
 		board = move(r.board);
 		ob = max(0, ob_ - (int)floor(r.pscore * 0.2f));
 		hist = s.hist;
-		hist.emplace_back(pos, rot, r.chain, r.pscore);
+		hist.emplace_back(pos, rot, r.chain, r.pscore, ob);
 	}
 };
 
@@ -206,9 +208,19 @@ private:
 		return make_tuple(anni, forceGravity(board, anniList));
 	}
 
-	inline Result evaluateBoard(int turn, Board board, const Pack& pack, const int pos, int ob) {
-		auto update = forceGravity(board, pack, pos);
-		int score = 0, pscore = 0, chain = 0;
+	inline int checkAround(const Board& b, const int x, const int y) {
+		static vector<int> dir = { -1, 1, BW, -BW-1, -BW+1, BW-1, BW+1 };
+		int idx = x + y * BW;
+		int minNum = 9;
+		for (auto& d : dir) {
+			int num = b[idx + d];
+			if (EMPTY < num && num < OBSTACLE) minNum = min(num, minNum);
+		}
+		return SUM - minNum;
+	}
+
+	inline tuple<int, int> fowardBoard(Board& board, vector<Pii>& update) {
+		int chain = 0, pscore = 0;
 		while (true) {
 			auto res = anniBoard(board, update);
 			auto anni = get<0>(res);
@@ -217,25 +229,65 @@ private:
 			++chain;
 			pscore += powCache[chain - 1] * static_cast<int>(floor(anni * 0.5f));
 		}
+		return make_tuple(pscore, chain);
+	}
+
+	inline tuple<int, int> tryBoard(Board board, const int x, const int y, const int num) {
+		board[x + y * BW] = num;
+		vector<Pii> update = { {x, y} };
+		return fowardBoard(board, update);
+	}
+
+	inline Result evaluateBoard(int turn, Board board, const Pack& pack, const int pos, int ob) {
+		static vector<int> hei(W);
+		
+		auto update = forceGravity(board, pack, pos);		
+		
+		int pscore = 0, chain = 0;
+		tie(pscore, chain) = fowardBoard(board, update);
 
 		for (int x = 1; x < BW - 1; ++x) {
 			if (board[x + PS * BW] != EMPTY)
 				return { -INF, pscore, chain, move(board) };
 		}
 
-		int sumh = 0, maxh = 0;
+		int sf = (int)floor(pscore * 0.2f);
+		if (sf >= 50) {
+			return{ INF, pscore, chain, move(board) };
+		}
+
+		
 		for (int x = 1; x < BW - 1; ++x) {
 			int h = 0;
 			for (int y = BH - 2; y > PS; --y) {
 				if (board[x + y * BW] == EMPTY) break;
 				++h;
 			}
-			maxh = max(h, maxh);
-			sumh += h;
+			hei[x - 1] = h;
 		}
 		
-		score += pscore >= 5 ? pscore * 5 : 1;
-		score -= maxh - (int)floor(sumh / W);
+		int next_ch = 0;
+		int next_sc = 0;
+		for (int x = 1; x < BW - 1; ++x) {
+			if (x - 2 > 0 && hei[x - 2] == 0) continue;
+			if (x < W && hei[x] == 0) continue;
+			auto y = BH - 2 - hei[x - 1];
+			const int maxNum = checkAround(board, x, y);
+			for (int n = 1; n <= maxNum; ++n) {
+				int sc, ch;
+				tie(sc, ch) = tryBoard(board, x, y, n);
+				next_ch = max(next_ch, ch);
+				next_sc = max(next_sc, sc);
+			}
+		}
+		
+		int score = 0;
+		
+		//if (max(next_ch, chain) > 16)
+		//	cerr << "emittable: " << chain << " next: " << next_ch << endl;
+
+		score += 100 * max(next_ch, chain);
+		score += max(pscore, next_sc);
 
 		return {score, pscore, chain, move(board)};
 	}
@@ -262,12 +314,15 @@ private:
 		}
 	}
 
+	vector<Pack> packs;
+	vector<int> powCache;
+	queue<Action> actCache;
+	bool isCache;
+
 public:
     const int W, H, PS, SUM, TURN, EMPTY, OBSTACLE;
     const int BW, BH;
-    vector<Pack> packs;
-	vector<int> powCache;
-
+    
     Game(const int w, const int h, const int ps, const int sum, const int turn, const vector<Pack>& packs_)
             : W(w), H(h), PS(ps), SUM(sum), TURN(turn), EMPTY(0), OBSTACLE(sum + 1), packs(turn * 4),
               BW(W + 2), BH(H + PS + 2), powCache(50) {
@@ -283,6 +338,7 @@ public:
 			pc = static_cast<int>(floor(k));
 			k *= 1.3f;
 		}
+		isCache = false;
     }
 
     Board inputBoard() {
@@ -321,8 +377,22 @@ public:
 
 		cerr << "[" << turn << "] " << endl;
 
-		const int k = 2;
-		const int beam = 48 * 48 * 48;
+		if (isCache && !actCache.empty()) {
+			int pos, rot, chain, pscore, nob;
+			tie(pos, rot, chain, pscore, nob) = actCache.front();
+			actCache.pop();
+			if (nob == ob) {
+				psc += pscore;
+				if (chain > 0)
+					cerr << "chain: " << chain << " score: " << psc << " (cache)" << endl;
+				return make_tuple(pos, rot);
+			}
+			cerr << "cache reset!!" << endl;
+			actCache = queue<Action>();
+		}
+
+		const int k = 3;
+		const int beam = 200;
 
 		priority_queue<Score, vector<Score>, ScoreComp> pq;
 		pq.emplace(b, ob);
@@ -333,6 +403,10 @@ public:
 			while (!pq.empty() && count > 0) {
 				auto st = pq.top();
 				if (st.score < -INF + 1) break;
+				if (st.score > INF - 1) {
+					npq.push(st);
+					break;
+				}
 				pq.pop();
 				--count;
 				nextPacks(t, st.ob, [&](const Pack& p, const int pos, const int rot, const int nob) {
@@ -347,9 +421,14 @@ public:
 			return make_tuple(0, 0);
 		}
 
-		int pos, rot, chain, pscore;
+		int pos, rot, chain, pscore, nob;
 		auto st = pq.top();
-		tie(pos, rot, chain, pscore) = st.hist[0];
+		tie(pos, rot, chain, pscore, nob) = st.hist[0];
+
+		if (isCache) {
+			for (auto&& act : st.hist) actCache.push(act);
+			actCache.pop();
+		}
 
 		psc += pscore;
 		if (chain > 0)
