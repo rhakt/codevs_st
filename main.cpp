@@ -14,7 +14,7 @@
 using namespace std;
 
 static const string AI_NAME = "efutea";
-static const int INF = 1 << 30;
+static const int INF = 1 << 28;
 
 
 inline int rnd(const int range) {
@@ -208,15 +208,32 @@ private:
 		return make_tuple(anni, forceGravity(board, anniList));
 	}
 
-	inline int checkAround(const Board& b, const int x, const int y) {
-		static vector<int> dir = { -1, 1, BW, -BW-1, -BW+1, BW-1, BW+1 };
-		int idx = x + y * BW;
-		int minNum = 9;
-		for (auto& d : dir) {
-			int num = b[idx + d];
-			if (EMPTY < num && num < OBSTACLE) minNum = min(num, minNum);
+	inline void checkAround(const Board& b, const int x, const int y, vector<int>& around) {
+		static vector<int> dir = { 1, BW - 1, BW + 1, BW };
+		for (auto&& a : around) a = 0;
+		const int idx = x + y * BW;
+		for (auto&& d : dir) {
+			int s, l = 0, sum = 0;
+			for (s = -1; ; --s) {
+				int num = b[idx + s * d];
+				if (EMPTY == num || num == OBSTACLE) break;
+				if (sum + num >= SUM) break;
+				sum += num;
+			}
+			++s;
+			while (s <= 0) {
+				if (sum < SUM) { 
+					if(sum > 0) around[SUM - sum - 1] += 1;
+					++l;
+					int num = b[idx + l * d];
+					if (num == EMPTY || num == OBSTACLE) break;
+					sum += num;
+				} else {
+					sum -= b[idx + s * d];
+					++s;
+				}
+			}
 		}
-		return SUM - minNum;
 	}
 
 	inline tuple<int, int> fowardBoard(Board& board, vector<Pii>& update) {
@@ -238,8 +255,19 @@ private:
 		return fowardBoard(board, update);
 	}
 
-	inline Result evaluateBoard(int turn, Board board, const Pack& pack, const int pos, int ob) {
+	inline void packInclude(int turn, vector<int>& inc, int k = 2) {
+		for (auto&& i : inc) i = 0;
+		for (int i = k - 1; i >= 0; --i) {
+			const Pack& pack = packs[(turn + i) * 4];
+			for (auto&& p : pack) {
+				if (EMPTY < p && p < OBSTACLE) inc[p - 1] = i + 1;
+			}
+		}
+	}
+	
+	inline Result evaluateBoard(int turn, Board board, const Pack& pack, const int pos, int ob, const tuple<int, int, int>& eneinfo) {
 		static vector<int> hei(W);
+		static vector<int> around(SUM - 1), inc(SUM - 1);
 		
 		auto update = forceGravity(board, pack, pos);		
 		
@@ -251,12 +279,15 @@ private:
 				return { -INF, pscore, chain, move(board) };
 		}
 
-		int sf = (int)floor(pscore * 0.2f);
-		if (sf >= 50) {
-			return{ INF, pscore, chain, move(board) };
+		int ech, esc, ct;
+		tie(esc, ech, ct) = eneinfo;
+		if (ct == turn && ech > 11/* && floor(esc * 0.2f) <= floor(pscore * 0.2f)*/) {
+			cerr << "<interrupt: ch = " << chain << ", sc = " << pscore << ">" << endl;
 		}
 
+		int sf = (int)floor(pscore * 0.2f);
 		
+		int hpena = 0;
 		for (int x = 1; x < BW - 1; ++x) {
 			int h = 0;
 			for (int y = BH - 2; y > PS; --y) {
@@ -264,31 +295,41 @@ private:
 				++h;
 			}
 			hei[x - 1] = h;
+			if (x > 1) hpena += (int)pow(max(0, abs(hei[x - 2] - hei[x - 1]) - 3), 2);
 		}
 		
 		int next_ch = 0;
 		int next_sc = 0;
+		//packInclude(turn + 1, inc, 3);
 		for (int x = 1; x < BW - 1; ++x) {
 			if (x - 2 > 0 && hei[x - 2] == 0) continue;
 			if (x < W && hei[x] == 0) continue;
 			auto y = BH - 2 - hei[x - 1];
-			const int maxNum = checkAround(board, x, y);
-			for (int n = 1; n <= maxNum; ++n) {
+			checkAround(board, x, y, around);
+			for (int n = 1; n <= SUM - 1; ++n) {
+				//if (inc[n - 1] < 1) continue;
+				if (around[n - 1] < 1) continue;
 				int sc, ch;
 				tie(sc, ch) = tryBoard(board, x, y, n);
 				next_ch = max(next_ch, ch);
-				next_sc = max(next_sc, sc);
+				next_sc = max(next_sc, sc/* - inc[n - 1] * 35*/);
 			}
 		}
+
+		if (sf >= 50 /*&& sf + 14 > (int)floor(next_sc * 0.2f)*/) {
+			return{ INF + pscore, pscore, chain, move(board) };
+		}
+
 		
 		int score = 0;
-		
-		//if (max(next_ch, chain) > 16)
+			
+		//if (max(next_ch, chain) > 11)
 		//	cerr << "emittable: " << chain << " next: " << next_ch << endl;
 
-		score += 100 * max(next_ch, chain);
+		score += 1000 * max(next_ch, chain);
 		score += max(pscore, next_sc);
-
+		score += pscore < 5 ? -pscore * 2 : 0;
+		score -= hpena;
 		return {score, pscore, chain, move(board)};
 	}
 	
@@ -365,17 +406,33 @@ public:
 
     tuple<int, int> solve(const int turn, const int remain, const int ob, const Board& b, const int eob, const Board& eb) {
 		static int psc = 0;
-		/*static Board preb;
-		if (turn > 0) {
-			for (int i = 0; i < b.size(); ++i) {
-				if (preb[i] != b[i]) cerr << "!!" << endl;
-			}
-		}*/
-
+		static vector<int> hei(W);
+		static vector<int> around(SUM - 1), inc(SUM - 1);
+		
 		auto limit = min(remain, 20000);
 		auto start = chrono::system_clock::now();
 
-		cerr << "[" << turn << "] " << endl;
+		cerr << "[" << turn << "] ob: " << ob << endl;
+
+		tuple<int, int, int> eneinfo = {0, 0, turn};
+		if(ob < 7) {
+			int next_ch = 0;
+			int next_sc = 0;
+			nextPacks(turn, eob, [&](const Pack& p, const int pos, const int rot, const int nob) {
+				Board eb_ = eb;
+				auto update = forceGravity(eb_, p, pos);
+				int sc, ch;
+				tie(sc, ch) = fowardBoard(eb_, update);
+				for (int x = 1; x < BW - 1; ++x) {
+					if (eb[x + PS * BW] != EMPTY) return;
+				}
+				next_ch = max(next_ch, ch);
+				next_sc = max(next_sc, sc);
+			});
+			eneinfo = make_tuple(next_sc, next_ch, turn);
+			if(next_ch > 11)
+				cerr << "<predicate: ch = " << next_ch << ", sc = " << next_sc << ">" << endl;
+		}
 
 		if (isCache && !actCache.empty()) {
 			int pos, rot, chain, pscore, nob;
@@ -391,7 +448,7 @@ public:
 			actCache = queue<Action>();
 		}
 
-		const int k = 3;
+		const int k = turn < 20 ? 5 : 3;
 		const int beam = 200;
 
 		priority_queue<Score, vector<Score>, ScoreComp> pq;
@@ -400,17 +457,36 @@ public:
 		for(int t = turn; t <= turn + k && !pq.empty(); ++t) {
 			priority_queue<Score, vector<Score>, ScoreComp> npq;
 			int count = beam;
+			unordered_map<int, int> actmap;
+			bool flag = pq.size() > count;
+			int th = (int)floor(count * 0.1f);
 			while (!pq.empty() && count > 0) {
 				auto st = pq.top();
+				pq.pop();
+				if (flag && t - 1 > turn) {
+					int key = 0, k1, r1;
+					for (int i = 0; i < 1 /* t - turn - 1*/; ++i) {
+						tie(k1, r1, ignore, ignore, ignore) = st.hist[i];
+						key <<= 6;
+						key += (k1 << 2) + r1;
+					}
+					auto it = actmap.find(key);
+					if (it == actmap.end()) {
+						actmap.insert(make_pair(key, 1));
+					} else if (it->second > th) {
+						continue;
+					} else {
+						it->second += 1; 
+					}
+				}
+				--count;
 				if (st.score < -INF + 1) break;
 				if (st.score > INF - 1) {
 					npq.push(st);
 					break;
 				}
-				pq.pop();
-				--count;
 				nextPacks(t, st.ob, [&](const Pack& p, const int pos, const int rot, const int nob) {
-					auto res = evaluateBoard(t, st.board, p, pos, nob);
+					auto res = evaluateBoard(t, st.board, p, pos, nob, eneinfo);
 					npq.emplace(st, move(res), pos, rot, nob);
 				});
 			}
@@ -437,8 +513,8 @@ public:
 
 		auto diff = std::chrono::system_clock::now() - start;
 		auto ms = chrono::duration_cast<chrono::milliseconds>(diff).count();
-		if(ms > 1000)
-			cerr << "elapsed time = " << ms << " msec." << endl;
+		if(ms > 2000)
+			cerr << "time = " << ms << " msec." << endl;
 		
         return make_tuple(pos, rot);
     }
