@@ -281,7 +281,7 @@ private:
 
 		int ech, esc, ct;
 		tie(esc, ech, ct) = eneinfo;
-		if (ct == turn && ech > 11/* && floor(esc * 0.2f) <= floor(pscore * 0.2f)*/) {
+		if (ct == turn && ech >= 10 && floor(esc * 0.2f) <= floor(pscore * 0.2f)) {
 			cerr << "<interrupt: ch = " << chain << ", sc = " << pscore << ">" << endl;
 		}
 
@@ -430,7 +430,7 @@ public:
 				next_sc = max(next_sc, sc);
 			});
 			eneinfo = make_tuple(next_sc, next_ch, turn);
-			if(next_ch > 11)
+			if(next_ch >= 10)
 				cerr << "<predicate: ch = " << next_ch << ", sc = " << next_sc << ">" << endl;
 		}
 
