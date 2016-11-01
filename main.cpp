@@ -61,7 +61,7 @@ struct Score {
 		chain = r.chain;
 		board = move(r.board);
 		s.next = move(r.next);
-		ob = max(0, ob_ - (int)floor(r.pscore * 0.2f));
+		ob = max(0, ob_ - (int)(r.pscore * 0.2f));
 		hist = make_tuple(pos, rot, r.chain, r.pscore, ob);
 	}
 	Score(Score& s, Result&& r, int ob_) {
@@ -70,7 +70,7 @@ struct Score {
 		chain = r.chain;
 		board = move(r.board);
 		s.next = move(r.next);
-		ob = max(0, ob_ - (int)floor(r.pscore * 0.2f));
+		ob = max(0, ob_ - (int)(r.pscore * 0.2f));
 		hist = s.hist;
 	}
 };
@@ -259,7 +259,7 @@ private:
 			update = move(get<1>(res));
 			if (anni == 0) break;
 			++chain;
-			pscore += powCache[chain - 1] * static_cast<int>(floor(anni * 0.5f));
+			pscore += powCache[chain - 1] * (int)(anni * 0.5f);
 		}
 		return make_tuple(pscore, chain);
 	}
@@ -270,12 +270,12 @@ private:
 		return fowardBoard(board, update);
 	}
 
-	inline void packInclude(int turn, vector<int>& inc, int k = 2) {
+	inline void packInclude(int turn, vector<int>& inc, int k = 4) {
 		for (auto&& i : inc) i = 0;
-		for (int i = k - 1; i >= 0; --i) {
+		for (int i = 1; i <= k; ++i) {
 			const Pack& pack = packs[(turn + i) * 4];
 			for (auto&& p : pack) {
-				if (EMPTY < p && p < OBSTACLE) inc[p - 1] = i + 1;
+				if (EMPTY < p && p < OBSTACLE && !inc[p - 1]) inc[p - 1] = i;
 			}
 		}
 	}
@@ -300,7 +300,7 @@ private:
 	}
 
 	inline Result evaluateBoard(int turn, Board board, const Pack& pack, const int pos, int ob, const tuple<int, int, int>& eneinfo, const vector<int>& next, int remain) {
-		static vector<int> hei(W), ghei(W), around(SUM - 1), prev(W);
+		static vector<int> hei(W), ghei(W), around(SUM - 1), prev(W), inc(SUM - 1);
 		static int theat = 0;
 		
 		auto update = forceGravity(board, pack, pos);		
@@ -315,13 +315,13 @@ private:
 
 		int ech, esc, ct;
 		tie(esc, ech, ct) = eneinfo;
-		if (ct == turn && ech >= 10 && floor(esc * 0.2f) <= floor(pscore * 0.2f)) {
+		if (ct == turn && ech >= 13 && (esc * 0.2f) <= (pscore * 0.2f)) {
 			cerr << "<interrupt: ch = " << chain << ", sc = " << pscore << ">" << endl;
 		}
 		if (ob > 6) theat = 0;
 		else  theat = max(theat, esc);
 
-		int sf = (int)floor(pscore * 0.2f);
+		int sf = (int)(pscore * 0.2f);
 		
 		int hpena = 0, hpena2 = 0;
 		for (int x = 1; x < BW - 1; ++x) {
@@ -332,9 +332,9 @@ private:
 			}
 			hei[x - 1] = h;
 			if (x > 1) {
-				ghei[x - 1] = hei[x - 1] - hei[x - 2];
+				ghei[x - 2] = hei[x - 1] - hei[x - 2];
 				hpena += (int)pow(max(0, abs(ghei[x - 1]) - 3), 2);
-				ghei[x - 1] = abs(ghei[x - 1]) < 4 ? 0 : ghei[x - 1];
+				ghei[x - 2] = abs(ghei[x - 2]) < 4 ? 0 : ghei[x - 2];
 			}
 		}
 		ghei[W - 1] = 5;
@@ -354,6 +354,7 @@ private:
 		}
 		int next_ch = 0;
 		int next_sc = 0;
+		packInclude(turn, inc);
 		for (int x = 1; x < BW - 1; ++x) {
 			if (x - 2 > 0 && hei[x - 2] == 0) continue;
 			if (x < W && hei[x] == 0) continue;
@@ -364,6 +365,7 @@ private:
 			checkAround(board, x, y, around);
 			for (int n = 1; n <= SUM - 1; ++n) {
 				if (around[n - 1] < 1) continue;
+				if (!inc[n - 1]) continue;
 				if (x < pos - 1 || pos + PS < x) {
 					if (next.size() > 0 && !(prev[x - 1] & (1 << (n - 1)))) continue;
 				}
@@ -372,19 +374,13 @@ private:
 				if (ch > 0) {
 					next2.push_back(x << 4 | n);
 				}
+				//int t = (int)(sc / powCache[inc[n - 1] - 1]);
 				next_ch = max(next_ch, ch);
 				next_sc = max(next_sc, sc);
 			}
 		}
 		
-		/*int th = (turn > 40 && theat < 250 ? 50 : 100);
-		int sfd = (int)floor(theat * 1.3f * 0.2f) + ob;
-		if((int)floor(pscore * 0.2f) + 12 > (int)floor(next_sc * 0.2f)) if ((sf >= th)
-			|| ((sf >= sfd && sfd >= (ob > 7 ? 30 : 50)))
-			|| (sf < sfd && sf >= 30)) {
-			return{ INF + pscore, pscore, chain, move(board), move(next2) };
-		}*/
-		const int sfd = (int)floor(theat * 1.69f * 0.2f) + ob;
+		const int sfd = (int)(theat * 1.69f * 0.2f) + ob;
 		const int th = remain < 30000 ? (remain < 10000 ? 30 : 60) : min(sfd + W * H, W * H * 2);
 		if (sf >= th) { return{ INF + pscore, pscore, chain, move(board), move(next2) }; }
 
@@ -394,8 +390,9 @@ private:
 		//if (chain > 15)
 		//	cerr << "emittable: " << chain << " (" << sf << ")" << endl;
 
-		score += 200 * max(next_ch - 1, chain);
-		score += max(pscore, (int)(next_sc * 0.77f));
+		score += 200 * max(next_ch, chain);
+		//score += max(pscore, (int)(next_sc * 0.77f));
+		score += max(pscore, next_sc);
 		score += pscore < 5 ? -pscore * 2 : 0;
 		score -= hpena + hpena2;
 		score += evaluateBlock(board);
@@ -444,7 +441,7 @@ public:
         }
 		auto k = 1.3f;
 		for (auto&& pc : powCache) {
-			pc = static_cast<int>(floor(k));
+			pc = (int)k;
 			k *= 1.3f;
 		}
     }
@@ -497,11 +494,11 @@ public:
 				next_sc = max(next_sc, sc);
 			});
 			eneinfo = make_tuple(next_sc, next_ch, turn);
-			if(next_ch >= 10)
+			if(next_ch >= 13)
 				cerr << "<predicate: ch = " << next_ch << ", sc = " << next_sc << ">\n";
 		}
 
-		const int k = turn < 20 ? 6 : (remain < 30000 ? (remain < 10000 ? 2 : 3) : 5);
+		const int k = turn < 20 ? 6 : (remain < 30000 ? (remain < 10000 ? 2 : 3) : 6);
 		const int beam = 200;
 
 		priority_queue<Score, vector<Score>, ScoreComp> pq;
@@ -510,19 +507,23 @@ public:
 		for(int t = turn; t <= min(turn + k, TURN - 1) && !pq.empty(); ++t) {
 			int pob = 0;
 			if (t == turn && get<0>(eneinfo) >= 250) {
-				pob = (int)floor(get<0>(eneinfo) * 0.2f);
+				pob = (int)(get<0>(eneinfo) * 0.2f);
 			}
 			priority_queue<Score, vector<Score>, ScoreComp> npq;
 			int count = beam;
 			while (!pq.empty() && count) {
 				auto st = pq.top();
 				pq.pop();
-				--count;
+				if (st.score < -INF + 1 && count == beam) {
+					npq.push(st);
+					break;
+				}
 				if (st.score < -INF + 1) break;
 				if (st.score > INF - 1) {
 					npq.push(st);
 					break;
 				}
+				--count;
 				if (st.pscore >= 250) {
 					npq.push(st);
 					continue;
